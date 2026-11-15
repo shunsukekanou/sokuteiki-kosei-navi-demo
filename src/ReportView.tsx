@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { State } from './data'
-import { cycleOf, fmtDiff, fmtJa, fmtNum, nextDue, statusOf, todayStr } from './lib'
+import { cycleOf, fmtDiff, fmtJa, fmtNum, fmtPeriod, fmtYM, nextDue, periodOf, statusOf, todayStr } from './lib'
 
 const PAGE_W = 680
 const PAGE_H = 1009
@@ -16,6 +16,7 @@ export default function ReportView({ state, update }: { state: State; update: (f
   const offCount = all.length - targets.length
   const rows = targets.map((x, k) => ({ no: k + 1, i: x.i, st: x.st, rec: x.c.last }))
   const total = rows.length
+  const per = periodOf(state.instruments, state.records, today)
   const pass = rows.filter((r) => r.st === '合格').length
   const adj = rows.filter((r) => r.st === '要調整').length
   const ng = rows.filter((r) => r.st === '異常').length
@@ -125,6 +126,14 @@ export default function ReportView({ state, update }: { state: State; update: (f
               <th>実施日</th>
               <td>{period}</td>
             </tr>
+            <tr>
+              <th>校正期間</th>
+              <td colSpan={3}>
+                {per.targets > 0
+                  ? `${fmtPeriod(per.start, per.end)}　（前回の実施：${per.prevMin === per.prevMax ? fmtYM(per.prevMin) : `${fmtYM(per.prevMin)}〜${fmtYM(per.prevMax)}`}）`
+                  : '―'}
+              </td>
+            </tr>
           </tbody>
         </table>
 
@@ -152,7 +161,7 @@ export default function ReportView({ state, update }: { state: State; update: (f
           </tbody>
         </table>
 
-        {offCount > 0 && <p className="note">実施期間外（次の期限の1か月前まで待機）の{offCount}台は、この報告書の対象に含めていません。</p>}
+        {offCount > 0 && <p className="note">校正期間の前の{offCount}台は、この報告書の対象に含めていません（次の校正期間まで待機）。</p>}
         <h2>2. 総括</h2>
         <p className="comment">{comment}</p>
 

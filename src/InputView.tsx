@@ -3,7 +3,7 @@ import type { Instrument, Rec, Result, State } from './data'
 import { makeRec } from './data'
 import Scanner from './Scanner'
 import { Badge, refText } from './ui'
-import { cycleOf, dueNote, fmtDiff, fmtJa, fmtNum, idFromQr, lastDone, nextDue, recordsOf, statusOf, todayStr, withinTol } from './lib'
+import { cycleOf, daysBetween, dueNote, fmtDiff, fmtJa, fmtNum, fmtPeriod, fmtYM, idFromQr, lastDone, nextDue, periodOf, recordsOf, statusOf, todayStr, withinTol } from './lib'
 
 interface Props {
   state: State
@@ -23,6 +23,18 @@ export default function InputView({ state, update, selId, setSelId, goLedger }: 
   const pending = stats.filter((s) => s === '未実施').length
   const total = done + pending
   const off = stats.length - total
+  // 校正期間（期限の月の1日〜期限）と、いまの状態
+  const per = periodOf(state.instruments, state.records, today)
+  let periodState = ''
+  if (per.targets > 0) {
+    const toEnd = daysBetween(today, per.end)
+    if (pending === 0) periodState = '今回の校正は、すべて完了しました'
+    else if (today < per.start) periodState = `校正期間は ${fmtJa(per.start)} からです`
+    else if (toEnd > 0) periodState = `ただいま校正期間中です（期限まで${toEnd}日）`
+    else if (toEnd === 0) periodState = 'ただいま校正期間中です（期限は今日です）'
+    else periodState = `期限を${-toEnd}日すぎています。未実施の機器があります`
+    if (per.overdue > 0 && toEnd >= 0) periodState += `　期限をすぎた機器：${per.overdue}台`
+  }
 
   function found(text: string) {
     const id = idFromQr(text)
@@ -49,6 +61,21 @@ export default function InputView({ state, update, selId, setSelId, goLedger }: 
   return (
     <section>
       <div className="progress card">
+        <div className="period">
+          {per.targets > 0 ? (
+            <>
+              <small className="plabel">今年の校正期間</small>
+              <b>{fmtPeriod(per.start, per.end)}</b>
+              <span className={`pstate ${pending > 0 && today > per.end ? 'late' : pending === 0 ? 'done' : 'now'}`}>{periodState}</span>
+              <small>前回の実施：{per.prevMin === per.prevMax ? fmtYM(per.prevMin) : `${fmtYM(per.prevMin)}〜${fmtYM(per.prevMax)}`}</small>
+            </>
+          ) : (
+            <>
+              <b>いまは、校正期間ではありません</b>
+              {per.next && <small>次の校正期間：{fmtJa(per.next)} から</small>}
+            </>
+          )}
+        </div>
         <div className="progress-top">
           <b>今回の校正の進み具合</b>
           <span>
@@ -59,8 +86,8 @@ export default function InputView({ state, update, selId, setSelId, goLedger }: 
           <i style={{ width: total ? `${(done / total) * 100}%` : '0%' }} />
         </div>
         <p className="muted small">
-          {pending > 0 ? `残り ${pending} 台。` : total > 0 ? '実施期間の測定器は、すべて入力が終わりました。「報告書」で自動作成できます。' : '今は、実施期間の測定器がありません。'}
-          {' '}次の期限の1か月前から、自動で数え直します{off > 0 ? `（実施期間外の ${off} 台は数えません）` : ''}。
+          {pending > 0 ? `残り ${pending} 台。` : total > 0 ? '「報告書」で自動作成できます。' : ''}
+          {off > 0 ? `校正期間外の ${off} 台は数えません。` : ''}
         </p>
       </div>
 

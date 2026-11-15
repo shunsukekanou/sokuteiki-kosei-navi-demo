@@ -977,3 +977,48 @@ textarea {
   overflow-x: hidden;
   max-width: 100%;
 }
+
+.period {
+  display: grid;
+  gap: 4px;
+  background: #eaf5f3;
+  border: 1.5px solid #8fc9c2;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.period > b {
+  color: var(--teal);
+  font-size: 17px;
+  line-height: 1.4;
+}
+.period small {
+  color: var(--muted);
+  font-size: 14px;
+}
+.pstate {
+  justify-self: start;
+  border-radius: 999px;
+  padding: 2px 12px;
+  font-size: 14px;
+  font-weight: 800;
+}
+.pstate.now {
+  background: var(--teal);
+  color: #fff;
+}
+.pstate.done {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+.pstate.late {
+  background: var(--ng-bg);
+  color: var(--ng);
+}
+
+.period > b {
+  word-break: keep-all;
+}
+.period .plabel {
+  font-weight: 700;
+}

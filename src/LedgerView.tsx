@@ -7,6 +7,7 @@ import {
   INST_HEADERS,
   addDays,
   clearState,
+  cycleOf,
   decimalsOf,
   addMonths,
   downloadText,
@@ -215,7 +216,7 @@ export default function LedgerView({ state, update, replace, goInput }: Props) {
                     {st === '未実施' ? (
                       <span className="nw">（{dueNote(i, state.records, today)}）</span>
                     ) : st === '期間外' ? (
-                      <span className="nw">（実施期間は {fmtJa(addMonths(nextDue(i, state.records), -1))} から）</span>
+                      <span className="nw">（校正期間は {fmtJa(cycleOf(i, state.records, today).periodStart)} から）</span>
                     ) : null}
                   </span>
                 </div>
@@ -328,9 +329,9 @@ export default function LedgerView({ state, update, replace, goInput }: Props) {
             }}
           />
         </div>
-        <h3 className="sub">実施期間のしくみ（年1回の校正）</h3>
+        <h3 className="sub">校正期間のしくみ（年1回の校正）</h3>
         <p className="muted small">
-          各測定器に「前回の校正日」と「校正周期（月）」を入れておくと、次の期限の1か月前から、自動で「今回の実施」に切り替わります。前回までの結果は履歴に残したまま、進み具合は0から数え直します。実施期間の前の測定器は「実施期間外」と表示し、進み具合には数えません。前回の校正日と周期は、測定器の「直す」で変えられます。
+          各測定器に「前回の校正日」と「校正周期（月）」を入れておくと、次の期限の月の1日から期限までが、その測定器の校正期間になります（期限が月末なら、その月まるごと）。期間に入ると、自動で「今回の実施」に切り替わり、前回までの結果は履歴に残したまま、進み具合を0から数え直します。期間の前の測定器は「実施期間外」と表示し、進み具合にも報告書の対象にも含めません。前回の校正日と周期は、測定器の「直す」で変えられます。
         </p>
         <h3 className="sub">見本データ（お試し用）</h3>
         <div className="row">

@@ -66,33 +66,74 @@ export function lastDone(inst: Instrument, recs: Rec[]): string {
   return last ? last.date : inst.lastDate
 }
 
-// ---- 実施期間：次の期限の1か月前になると、自動で「今回の実施」に切り替わる（結果はリセットして数え直す）----
+// ---- 校正期間：「次の期限の月の1日」から「期限」まで。期間に入ると、自動で「今回の実施」に切り替わる ----
+export const startOfMonth = (s: string) => {
+  const d = parseYmd(s)!
+  return ymd(new Date(d.getFullYear(), d.getMonth(), 1))
+}
+export const endOfMonth = (s: string) => {
+  const d = parseYmd(s)!
+  return ymd(new Date(d.getFullYear(), d.getMonth() + 1, 0))
+}
 export interface Cycle {
   prev: string // いまの周期の「前回の校正日」（前の周期の最後の記録の日付）
   recs: Rec[] // いまの周期の記録
   last: Rec | undefined // いまの周期の結果（無ければ未実施）
-  due: string // 次の期限
-  windowStart: string // 実施期間の開始日（前回から数えた期限の1か月前）
-  inWindow: boolean
+  due: string // 次の期限（今回の記録があれば、その日付＋周期）
+  periodStart: string // 校正期間の開始日（期限の月の1日）
+  periodEnd: string // 校正期間の終わり（今回の期限）
+  inWindow: boolean // いま校正期間に入っているか
 }
 export function cycleOf(inst: Instrument, recs: Rec[], today: string): Cycle {
-  const wm = Math.min(1, inst.interval - 1) // 周期が1か月のときは、前倒しなし
   let prev = inst.lastDate
   for (const r of recs) {
     if (r.instId !== inst.id) continue
-    // この記録の「次の実施期間」がもう始まっていれば、この記録までは前の周期のもの
-    if (today >= addMonths(addMonths(r.date, inst.interval), -wm) && r.date > prev) prev = r.date
+    // この記録の「次の校正期間」（次の期限の月の1日〜）がもう始まっていれば、この記録までは前の周期のもの
+    if (today >= startOfMonth(addMonths(r.date, inst.interval)) && r.date > prev) prev = r.date
   }
   const mine = recs.filter((r) => r.instId === inst.id && r.date > prev)
   const last = latestRecord(mine, inst.id)
   const due = addMonths(last ? last.date : prev, inst.interval)
-  const windowStart = addMonths(addMonths(prev, inst.interval), -wm)
-  return { prev, recs: mine, last, due, windowStart, inWindow: today >= windowStart }
+  const periodEnd = addMonths(prev, inst.interval)
+  const periodStart = startOfMonth(periodEnd)
+  return { prev, recs: mine, last, due, periodStart, periodEnd, inWindow: today >= periodStart }
 }
 export function statusOf(inst: Instrument, recs: Rec[], today: string): Status {
   const c = cycleOf(inst, recs, today)
   if (c.last) return c.last.result
   return c.inWindow ? '未実施' : '期間外'
+}
+
+export const fmtYM = (s: string) => {
+  const d = parseYmd(s)
+  return d ? `${d.getFullYear()}年${d.getMonth() + 1}月` : s
+}
+// 校正期間の表示。その月まるごとなら「2026年11月（11月1日〜11月30日）」
+export function fmtPeriod(a: string, b: string): string {
+  const x = parseYmd(a)
+  const y = parseYmd(b)
+  if (!x || !y) return `${a}〜${b}`
+  const m = x.getMonth() + 1
+  const full = x.getDate() === 1 && y.getFullYear() === x.getFullYear() && y.getMonth() === x.getMonth() && y.getDate() === new Date(y.getFullYear(), y.getMonth() + 1, 0).getDate()
+  if (full) return `${x.getFullYear()}年${m}月（${m}月1日〜${m}月${y.getDate()}日）`
+  if (x.getFullYear() === y.getFullYear()) return `${fmtJa(a)}〜${y.getMonth() + 1}月${y.getDate()}日`
+  return `${fmtJa(a)}〜${fmtJa(b)}`
+}
+// 今年の校正期間（実施期間中の測定器の、いちばん早い開始〜いちばん遅い期限）。
+// 期限をすぎたまま未実施の機器は、期間の計算から外し、台数だけ別に数える（古い期限に引っ張られないように）
+export function periodOf(insts: Instrument[], recs: Rec[], today: string) {
+  const cs = insts.map((i) => ({ c: cycleOf(i, recs, today), st: statusOf(i, recs, today) }))
+  const tg = cs.filter((x) => x.st !== '期間外')
+  const next = cs.map((x) => x.c.periodStart).sort()[0] ?? ''
+  const isOver = (x: (typeof cs)[number]) => x.st === '未実施' && x.c.periodEnd < today
+  const overdue = tg.filter(isOver).length
+  if (!tg.length) return { targets: 0, overdue: 0, start: '', end: '', prevMin: '', prevMax: '', next }
+  const base = tg.filter((x) => !isOver(x))
+  const use = base.length ? base : tg
+  const starts = use.map((x) => x.c.periodStart).sort()
+  const ends = use.map((x) => x.c.periodEnd).sort()
+  const prevs = use.map((x) => x.c.prev).sort()
+  return { targets: tg.length, overdue, start: starts[0], end: ends[ends.length - 1], prevMin: prevs[0], prevMax: prevs[prevs.length - 1], next }
 }
 export function dueNote(inst: Instrument, recs: Rec[], today: string): string {
   const d = daysBetween(today, nextDue(inst, recs))

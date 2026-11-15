@@ -1,4 +1,4 @@
-import { addDays, addMonths, nowStr, statusOf, todayStr } from './lib'
+import { addDays, addMonths, endOfMonth, nowStr, statusOf, todayStr } from './lib'
 
 export type Result = '合格' | '要調整' | '異常'
 export type Status = '未実施' | '期間外' | Result // 未実施＝実施期間中でまだ／期間外＝次の実施期間まで待機
@@ -48,19 +48,19 @@ interface Seed {
   tol: number
   unit: string
   dec: number
-  dueOffset: number // 今日から見た次回期限（日）
+  dueMonth: number // 次回の期限の月（0＝今月の月末、5＝5か月あとの月末）
 }
 const SEEDS: Seed[] = [
-  { id: 'MI-001', name: '外側マイクロメータ 0-25mm', place: '第1加工場 工具棚A', standard: 'ゲージブロック 25mm', ref: 25.0, tol: 0.002, unit: 'mm', dec: 3, dueOffset: -10 },
-  { id: 'MI-002', name: '外側マイクロメータ 25-50mm', place: '第1加工場 工具棚A', standard: 'ゲージブロック 50mm', ref: 50.0, tol: 0.002, unit: 'mm', dec: 3, dueOffset: 5 },
-  { id: 'MI-003', name: 'ノギス 150mm', place: '第1加工場 工具棚B', standard: 'ゲージブロック 100mm', ref: 100.0, tol: 0.03, unit: 'mm', dec: 2, dueOffset: 40 },
-  { id: 'MI-004', name: 'ダイヤルゲージ 0.01mm', place: '第1加工場 検査台', standard: 'ゲージブロック 1mm', ref: 1.0, tol: 0.005, unit: 'mm', dec: 3, dueOffset: 90 },
-  { id: 'MI-005', name: 'ハイトゲージ 300mm', place: '検査室 定盤横', standard: 'ゲージブロック 200mm', ref: 200.0, tol: 0.03, unit: 'mm', dec: 2, dueOffset: 120 },
-  { id: 'MI-006', name: 'シリンダゲージ 18-35mm', place: '検査室 棚C', standard: 'リングゲージ φ25', ref: 25.0, tol: 0.003, unit: 'mm', dec: 3, dueOffset: 20 },
-  { id: 'MI-007', name: '表面粗さ測定機', place: '検査室 測定台', standard: '粗さ標準片 Ra1.60', ref: 1.6, tol: 0.16, unit: 'µm', dec: 2, dueOffset: 200 },
-  { id: 'MI-008', name: 'トルクレンチ 20-100N·m', place: '第2加工場 工具棚D', standard: 'トルク校正器 50N·m', ref: 50.0, tol: 1.5, unit: 'N·m', dec: 1, dueOffset: 250 },
-  { id: 'MI-009', name: 'ピンゲージ φ5.000', place: '検査室 棚C', standard: '基準ピン φ5', ref: 5.0, tol: 0.001, unit: 'mm', dec: 3, dueOffset: 300 },
-  { id: 'MI-010', name: 'デジタル温度計', place: '第2加工場 事務台', standard: '標準温度計 20.0℃', ref: 20.0, tol: 0.5, unit: '℃', dec: 1, dueOffset: 330 },
+  { id: 'MI-001', name: '外側マイクロメータ 0-25mm', place: '第1加工場 工具棚A', standard: 'ゲージブロック 25mm', ref: 25.0, tol: 0.002, unit: 'mm', dec: 3, dueMonth: 0 },
+  { id: 'MI-002', name: '外側マイクロメータ 25-50mm', place: '第1加工場 工具棚A', standard: 'ゲージブロック 50mm', ref: 50.0, tol: 0.002, unit: 'mm', dec: 3, dueMonth: 0 },
+  { id: 'MI-003', name: 'ノギス 150mm', place: '第1加工場 工具棚B', standard: 'ゲージブロック 100mm', ref: 100.0, tol: 0.03, unit: 'mm', dec: 2, dueMonth: 0 },
+  { id: 'MI-004', name: 'ダイヤルゲージ 0.01mm', place: '第1加工場 検査台', standard: 'ゲージブロック 1mm', ref: 1.0, tol: 0.005, unit: 'mm', dec: 3, dueMonth: 0 },
+  { id: 'MI-005', name: 'ハイトゲージ 300mm', place: '検査室 定盤横', standard: 'ゲージブロック 200mm', ref: 200.0, tol: 0.03, unit: 'mm', dec: 2, dueMonth: 0 },
+  { id: 'MI-006', name: 'シリンダゲージ 18-35mm', place: '検査室 棚C', standard: 'リングゲージ φ25', ref: 25.0, tol: 0.003, unit: 'mm', dec: 3, dueMonth: 0 },
+  { id: 'MI-007', name: '表面粗さ測定機', place: '検査室 測定台', standard: '粗さ標準片 Ra1.60', ref: 1.6, tol: 0.16, unit: 'µm', dec: 2, dueMonth: 0 },
+  { id: 'MI-008', name: 'トルクレンチ 20-100N·m', place: '第2加工場 工具棚D', standard: 'トルク校正器 50N·m', ref: 50.0, tol: 1.5, unit: 'N·m', dec: 1, dueMonth: 5 },
+  { id: 'MI-009', name: 'ピンゲージ φ5.000', place: '検査室 棚C', standard: '基準ピン φ5', ref: 5.0, tol: 0.001, unit: 'mm', dec: 3, dueMonth: 0 },
+  { id: 'MI-010', name: 'デジタル温度計', place: '第2加工場 事務台', standard: '標準温度計 20.0℃', ref: 20.0, tol: 0.5, unit: '℃', dec: 1, dueMonth: 8 },
 ]
 
 export function makeRec(inst: Instrument, date: string, measured: number | null, result: Result, person: string, note: string, at?: string): Rec {
@@ -96,7 +96,7 @@ export function makeSeed(): State {
     unit: s.unit,
     decimals: s.dec,
     interval: 12,
-    lastDate: addMonths(addDays(today, s.dueOffset), -12),
+    lastDate: addMonths(endOfMonth(addMonths(today, s.dueMonth)), -12),
   }))
   const mk = (instId: string, ago: number, measured: number, result: Result, person: string, note: string): Rec => {
     const date = addDays(today, -ago)
