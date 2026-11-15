@@ -66,11 +66,33 @@ export function lastDone(inst: Instrument, recs: Rec[]): string {
   return last ? last.date : inst.lastDate
 }
 
-export function statusOf(inst: Instrument, recs: Rec[], roundStart: string, today: string): Status {
-  const last = latestRecord(recs, inst.id)
-  if (last && last.date >= roundStart) return last.result
-  const d = daysBetween(today, nextDue(inst, recs))
-  return d <= 30 ? '期限間近' : '未実施'
+// ---- 実施期間：次の期限の1か月前になると、自動で「今回の実施」に切り替わる（結果はリセットして数え直す）----
+export interface Cycle {
+  prev: string // いまの周期の「前回の校正日」（前の周期の最後の記録の日付）
+  recs: Rec[] // いまの周期の記録
+  last: Rec | undefined // いまの周期の結果（無ければ未実施）
+  due: string // 次の期限
+  windowStart: string // 実施期間の開始日（前回から数えた期限の1か月前）
+  inWindow: boolean
+}
+export function cycleOf(inst: Instrument, recs: Rec[], today: string): Cycle {
+  const wm = Math.min(1, inst.interval - 1) // 周期が1か月のときは、前倒しなし
+  let prev = inst.lastDate
+  for (const r of recs) {
+    if (r.instId !== inst.id) continue
+    // この記録の「次の実施期間」がもう始まっていれば、この記録までは前の周期のもの
+    if (today >= addMonths(addMonths(r.date, inst.interval), -wm) && r.date > prev) prev = r.date
+  }
+  const mine = recs.filter((r) => r.instId === inst.id && r.date > prev)
+  const last = latestRecord(mine, inst.id)
+  const due = addMonths(last ? last.date : prev, inst.interval)
+  const windowStart = addMonths(addMonths(prev, inst.interval), -wm)
+  return { prev, recs: mine, last, due, windowStart, inWindow: today >= windowStart }
+}
+export function statusOf(inst: Instrument, recs: Rec[], today: string): Status {
+  const c = cycleOf(inst, recs, today)
+  if (c.last) return c.last.result
+  return c.inWindow ? '未実施' : '期間外'
 }
 export function dueNote(inst: Instrument, recs: Rec[], today: string): string {
   const d = daysBetween(today, nextDue(inst, recs))
@@ -281,11 +303,9 @@ export function sanitize(x: unknown): State | null {
       decimals: Number.isInteger(v.decimals) ? Math.min(Math.max(v.decimals as number, 0), 4) : (inst?.decimals ?? 2),
     })
   }
-  const rs = typeof o.roundStart === 'string' ? normYmd(o.roundStart) : null
   return {
     instruments: insts,
     records: recs,
-    roundStart: rs ?? addDays(todayStr(), -20),
     person: typeof o.person === 'string' ? o.person : '',
     comment: typeof o.comment === 'string' ? o.comment : null,
   }

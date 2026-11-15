@@ -2,15 +2,15 @@ import type { Instrument, Status } from './data'
 import { fmtNum } from './lib'
 
 const CLS: Record<Status, string> = {
-  未実施: 'st-none',
-  期限間近: 'st-soon',
+  未実施: 'st-soon',
+  期間外: 'st-none',
   合格: 'st-ok',
   要調整: 'st-adj',
   異常: 'st-ng',
 }
 const LABEL: Record<Status, string> = {
   未実施: '未実施',
-  期限間近: '期限間近',
+  期間外: '実施期間外',
   合格: '合格',
   要調整: '要調整',
   異常: '異常・使用停止',

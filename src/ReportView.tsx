@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { State } from './data'
-import { fmtDiff, fmtJa, fmtNum, latestRecord, nextDue, statusOf, todayStr } from './lib'
+import { cycleOf, fmtDiff, fmtJa, fmtNum, nextDue, statusOf, todayStr } from './lib'
 
 const PAGE_W = 680
 const PAGE_H = 1009
@@ -10,12 +10,11 @@ export default function ReportView({ state, update }: { state: State; update: (f
   const sheetRef = useRef<HTMLElement>(null)
   const [fit, setFit] = useState({ s: 1, h: 0, multi: false })
   const [zoom, setZoom] = useState(1)
-  const rows = state.instruments.map((i, k) => {
-    const st = statusOf(i, state.records, state.roundStart, today)
-    const last = latestRecord(state.records, i.id)
-    const rec = last && last.date >= state.roundStart ? last : undefined
-    return { no: k + 1, i, st, rec }
-  })
+  // 報告書の対象は、いま「実施期間中」か「今回の結果がある」測定器（実施期間外は含めない）
+  const all = state.instruments.map((i) => ({ i, c: cycleOf(i, state.records, today), st: statusOf(i, state.records, today) }))
+  const targets = all.filter((x) => x.st !== '期間外')
+  const offCount = all.length - targets.length
+  const rows = targets.map((x, k) => ({ no: k + 1, i: x.i, st: x.st, rec: x.c.last }))
   const total = rows.length
   const pass = rows.filter((r) => r.st === '合格').length
   const adj = rows.filter((r) => r.st === '要調整').length
@@ -25,9 +24,7 @@ export default function ReportView({ state, update }: { state: State; update: (f
   const dates = rows.flatMap((r) => (r.rec ? [r.rec.date] : [])).sort()
   const period = dates.length ? (dates[0] === dates[dates.length - 1] ? fmtJa(dates[0]) : `${fmtJa(dates[0])} 〜 ${fmtJa(dates[dates.length - 1])}`) : '（まだ実施した記録がありません）'
   const action = rows.filter((r) => r.rec && r.rec.result !== '合格')
-  const trail = state.records
-    .filter((r) => r.date >= state.roundStart && state.instruments.some((i) => i.id === r.instId))
-    .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))
+  const trail = targets.flatMap((x) => x.c.recs).sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))
 
   const auto =
     total === 0
@@ -70,7 +67,7 @@ export default function ReportView({ state, update }: { state: State; update: (f
       window.removeEventListener('resize', onSize)
       window.removeEventListener('beforeprint', run)
     }
-  }, [state.records, state.instruments, state.roundStart, comment])
+  }, [state.records, state.instruments, comment])
 
   return (
     <section>
@@ -155,6 +152,7 @@ export default function ReportView({ state, update }: { state: State; update: (f
           </tbody>
         </table>
 
+        {offCount > 0 && <p className="note">実施期間外（次の期限の1か月前まで待機）の{offCount}台は、この報告書の対象に含めていません。</p>}
         <h2>2. 総括</h2>
         <p className="comment">{comment}</p>
 

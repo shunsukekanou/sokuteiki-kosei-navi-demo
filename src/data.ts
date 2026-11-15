@@ -1,7 +1,7 @@
-import { addDays, addMonths, nowStr, todayStr } from './lib'
+import { addDays, addMonths, nowStr, statusOf, todayStr } from './lib'
 
 export type Result = '合格' | '要調整' | '異常'
-export type Status = '未実施' | '期限間近' | Result
+export type Status = '未実施' | '期間外' | Result // 未実施＝実施期間中でまだ／期間外＝次の実施期間まで待機
 
 export interface Instrument {
   id: string // 管理番号
@@ -34,7 +34,6 @@ export interface Rec {
 export interface State {
   instruments: Instrument[]
   records: Rec[]
-  roundStart: string // 今回の校正の開始日（この日以降の記録を「今回実施」とみなす）
   person: string
   comment: string | null // 報告書の総括コメント（null＝自動の文）
 }
@@ -99,7 +98,6 @@ export function makeSeed(): State {
     interval: 12,
     lastDate: addMonths(addDays(today, s.dueOffset), -12),
   }))
-  const roundStart = addDays(today, -20)
   const mk = (instId: string, ago: number, measured: number, result: Result, person: string, note: string): Rec => {
     const date = addDays(today, -ago)
     return makeRec(instruments.find((i) => i.id === instId)!, date, measured, result, person, note, `${date} ${ago % 2 ? '10:20' : '14:05'}`)
@@ -112,16 +110,16 @@ export function makeSeed(): State {
     mk('MI-007', 1, 1.92, '異常', '担当A', '測定針の摩耗の疑い。使用停止の札を付け、メーカーへ修理を依頼。'),
     mk('MI-009', 1, 5.0, '合格', '担当A', ''),
   ]
-  return { instruments, records, roundStart, person: '担当A', comment: null }
+  return { instruments, records, person: '担当A', comment: null }
 }
 
 // 見本の「残りの測定器にも、合格の結果を入れる」（報告書を全台そろった形で試すため）
 export function fillSampleResults(s: State): State {
   const today = todayStr()
-  const have = new Set(s.records.filter((r) => r.date >= s.roundStart).map((r) => r.instId))
   const add: Rec[] = []
   s.instruments.forEach((i, k) => {
-    if (have.has(i.id)) return
+    const st = statusOf(i, s.records, today)
+    if (st !== '未実施' && st !== '期間外') return
     const dev = (k % 3 === 0 ? 0.3 : k % 3 === 1 ? -0.2 : 0.1) * i.tol
     add.push(makeRec(i, today, Number((i.ref + dev).toFixed(i.decimals + 1)), '合格', s.person || '担当A', ''))
   })

@@ -639,7 +639,7 @@ textarea {
   border-radius: 12px;
   overflow: hidden;
 }
-.lrow.st-期限間近 {
+.lrow.st-未実施 {
   border-left-color: #d9a21b;
 }
 .lrow.st-合格 {

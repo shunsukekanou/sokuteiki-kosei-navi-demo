@@ -35,7 +35,7 @@ interface Props {
   goInput: (id: string) => void
 }
 
-const FILTERS: ('すべて' | Status)[] = ['すべて', '未実施', '期限間近', '合格', '要調整', '異常']
+const FILTERS: ('すべて' | Status)[] = ['すべて', '未実施', '合格', '要調整', '異常', '期間外']
 
 export default function LedgerView({ state, update, replace, goInput }: Props) {
   const [filter, setFilter] = useState<'すべて' | Status>('すべて')
@@ -47,7 +47,7 @@ export default function LedgerView({ state, update, replace, goInput }: Props) {
   const jsonRef = useRef<HTMLInputElement>(null)
   const today = todayStr()
 
-  const rows = state.instruments.map((i) => ({ i, st: statusOf(i, state.records, state.roundStart, today) }))
+  const rows = state.instruments.map((i) => ({ i, st: statusOf(i, state.records, today) }))
   const count = (f: 'すべて' | Status) => (f === 'すべて' ? rows.length : rows.filter((r) => r.st === f).length)
   const shown = rows.filter((r) => filter === 'すべて' || r.st === filter)
 
@@ -212,7 +212,11 @@ export default function LedgerView({ state, update, replace, goInput }: Props) {
                   <span className="l-sub">
                     <span className="nw">{i.place}</span>
                     <span className="nw">次回 {fmtJa(nextDue(i, state.records))}</span>
-                    {st === '期限間近' || st === '未実施' ? <span className="nw">（{dueNote(i, state.records, today)}）</span> : null}
+                    {st === '未実施' ? (
+                      <span className="nw">（{dueNote(i, state.records, today)}）</span>
+                    ) : st === '期間外' ? (
+                      <span className="nw">（実施期間は {fmtJa(addMonths(nextDue(i, state.records), -1))} から）</span>
+                    ) : null}
                   </span>
                 </div>
                 <Badge s={st} />
@@ -324,16 +328,10 @@ export default function LedgerView({ state, update, replace, goInput }: Props) {
             }}
           />
         </div>
-        <h3 className="sub">今回の校正の開始日</h3>
-        <label className="field">
-          <span>この日以降の記録を「今回実施」として数えます</span>
-          <input
-            type="date"
-            value={state.roundStart}
-            max={today}
-            onChange={(e) => normYmd(e.target.value) && update((s) => ({ ...s, roundStart: e.target.value }))}
-          />
-        </label>
+        <h3 className="sub">実施期間のしくみ（年1回の校正）</h3>
+        <p className="muted small">
+          各測定器に「前回の校正日」と「校正周期（月）」を入れておくと、次の期限の1か月前から、自動で「今回の実施」に切り替わります。前回までの結果は履歴に残したまま、進み具合は0から数え直します。実施期間の前の測定器は「実施期間外」と表示し、進み具合には数えません。前回の校正日と周期は、測定器の「直す」で変えられます。
+        </p>
         <h3 className="sub">見本データ（お試し用）</h3>
         <div className="row">
           <button

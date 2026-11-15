@@ -3,7 +3,7 @@ import type { Instrument, Rec, Result, State } from './data'
 import { makeRec } from './data'
 import Scanner from './Scanner'
 import { Badge, refText } from './ui'
-import { dueNote, fmtDiff, fmtJa, fmtNum, idFromQr, lastDone, nextDue, recordsOf, statusOf, todayStr, withinTol } from './lib'
+import { cycleOf, dueNote, fmtDiff, fmtJa, fmtNum, idFromQr, lastDone, nextDue, recordsOf, statusOf, todayStr, withinTol } from './lib'
 
 interface Props {
   state: State
@@ -17,11 +17,12 @@ export default function InputView({ state, update, selId, setSelId, goLedger }: 
   const [msg, setMsg] = useState<{ kind: 'ok' | 'warn'; text: string } | null>(null)
   const today = todayStr()
   const inst = state.instruments.find((i) => i.id === selId) ?? null
-  const done = state.instruments.filter((i) => {
-    const s = statusOf(i, state.records, state.roundStart, today)
-    return s === '合格' || s === '要調整' || s === '異常'
-  }).length
-  const total = state.instruments.length
+  // 進み具合は「実施期間中」の測定器だけ数える（次の期限の1か月前から自動で数え直す）
+  const stats = state.instruments.map((i) => statusOf(i, state.records, today))
+  const done = stats.filter((s) => s === '合格' || s === '要調整' || s === '異常').length
+  const pending = stats.filter((s) => s === '未実施').length
+  const total = done + pending
+  const off = stats.length - total
 
   function found(text: string) {
     const id = idFromQr(text)
@@ -35,14 +36,15 @@ export default function InputView({ state, update, selId, setSelId, goLedger }: 
     }
   }
 
-  const samples = state.instruments
-    .filter((i) => {
-      const s = statusOf(i, state.records, state.roundStart, today)
-      return s === '未実施' || s === '期限間近'
-    })
+  // 見本のQRは、未実施の測定器を先に、足りなければ実施期間外のものを並べる
+  const ordered = state.instruments.map((i, k) => ({ i, s: stats[k] }))
+  const sampleList = [
+    ...ordered.filter((x) => x.s === '未実施'),
+    ...ordered.filter((x) => x.s === '期間外'),
+    ...ordered.filter((x) => x.s !== '未実施' && x.s !== '期間外'),
+  ]
     .slice(0, 4)
-    .map((i) => ({ id: i.id, name: i.name }))
-  const sampleList = samples.length ? samples : state.instruments.slice(0, 4).map((i) => ({ id: i.id, name: i.name }))
+    .map((x) => ({ id: x.i.id, name: x.i.name }))
 
   return (
     <section>
@@ -57,8 +59,8 @@ export default function InputView({ state, update, selId, setSelId, goLedger }: 
           <i style={{ width: total ? `${(done / total) * 100}%` : '0%' }} />
         </div>
         <p className="muted small">
-          {total - done > 0 ? `残り ${total - done} 台。` : '全台の入力が終わりました。「報告書」で自動作成できます。'}
-          {' '}今回の開始日：{fmtJa(state.roundStart)}
+          {pending > 0 ? `残り ${pending} 台。` : total > 0 ? '実施期間の測定器は、すべて入力が終わりました。「報告書」で自動作成できます。' : '今は、実施期間の測定器がありません。'}
+          {' '}次の期限の1か月前から、自動で数え直します{off > 0 ? `（実施期間外の ${off} 台は数えません）` : ''}。
         </p>
       </div>
 
@@ -128,7 +130,7 @@ function Entry({
   const [note, setNote] = useState('')
   const [saved, setSaved] = useState<{ text: string; rec: Rec } | null>(null)
 
-  const status = statusOf(inst, state.records, state.roundStart, today)
+  const status = statusOf(inst, state.records, today)
   const hist = recordsOf(state.records, inst.id)
   const num = measured.trim() === '' ? NaN : Number(measured.replace(/,/g, ''))
   const mv: number | null = Number.isFinite(num) ? num : null
@@ -143,7 +145,8 @@ function Entry({
   if (needNote && !note.trim()) problems.push('「要調整」「異常」のときは、処置内容を書いてください')
   if (!person.trim()) problems.push('担当者を入れてください（監査で「誰が」を示すため）')
   if (!date) problems.push('校正日を入れてください')
-  const alreadyThisRound = hist[0] && hist[0].date >= state.roundStart
+  const cyc = cycleOf(inst, state.records, today)
+  const alreadyThisRound = !!cyc.last
 
   function save() {
     if (problems.length || !result || mv === null) return
@@ -216,7 +219,7 @@ function Entry({
         </h2>
         {alreadyThisRound && (
           <p className="msg warn">
-            この測定器は、今回すでに {fmtJa(hist[0].date)} に「{hist[0].result}」で入力済みです。保存すると、新しい記録として追加されます（古い記録は履歴に残ります）。
+            この測定器は、今回すでに {fmtJa(cyc.last!.date)} に「{cyc.last!.result}」で入力済みです。保存すると、新しい記録として追加されます（古い記録は履歴に残ります）。
           </p>
         )}
         <label className="field">
