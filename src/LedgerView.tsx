@@ -284,7 +284,7 @@ export default function LedgerView({ state, update, replace, goInput }: Props) {
           <button className="btn primary" onClick={exportRecords}>
             実施結果CSVを書き出す
           </button>
-          <button className="btn" onClick={exportLedger}>
+          <button className="btn primary" onClick={exportLedger}>
             台帳CSVを書き出す
           </button>
           <input

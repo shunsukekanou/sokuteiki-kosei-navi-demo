@@ -160,7 +160,7 @@ textarea {
   justify-content: center;
   gap: 6px;
   border: 1.5px solid var(--navy2);
-  background: #fff;
+  background: #e4f0f9;
   color: var(--navy);
   border-radius: 12px;
   padding: 10px 14px;
@@ -170,7 +170,7 @@ textarea {
   text-align: center;
 }
 .btn:hover {
-  background: #e6f1fb;
+  background: #f4faff;
   border-color: #3b7fb8;
 }
 .btn.primary {
@@ -185,9 +185,10 @@ textarea {
 .btn.danger {
   border-color: var(--ng);
   color: var(--ng);
+  background: #fdeceb;
 }
 .btn.danger:hover {
-  background: #fdecea;
+  background: #fff5f4;
 }
 .btn.big {
   min-height: 54px;
