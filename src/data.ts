@@ -119,7 +119,7 @@ export function fillSampleResults(s: State): State {
   const add: Rec[] = []
   s.instruments.forEach((i, k) => {
     const st = statusOf(i, s.records, today)
-    if (st !== '未実施' && st !== '期間外') return
+    if (st !== '未実施') return // 校正期間中でまだ結果が無い測定器だけ（期間外は触らない）
     const dev = (k % 3 === 0 ? 0.3 : k % 3 === 1 ? -0.2 : 0.1) * i.tol
     add.push(makeRec(i, today, Number((i.ref + dev).toFixed(i.decimals + 1)), '合格', s.person || '担当A', ''))
   })

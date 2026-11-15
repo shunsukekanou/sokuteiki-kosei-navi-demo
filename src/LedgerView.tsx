@@ -339,7 +339,7 @@ export default function LedgerView({ state, update, replace, goInput }: Props) {
             className="btn"
             onClick={() => {
               update((s) => fillSampleResults(s))
-              setNote({ kind: 'ok', text: '残りの測定器にも「合格」の結果を入れました（報告書を全台そろった形で試すため）。' })
+              setNote({ kind: 'ok', text: '校正期間中の残りの測定器に「合格」の結果を入れました（報告書を、対象の全台がそろった形で試すため）。' })
             }}
           >
             残りに合格の結果を入れる
