@@ -1,8 +1,15 @@
+import { useLayoutEffect, useRef, useState } from 'react'
 import type { State } from './data'
 import { fmtDiff, fmtJa, fmtNum, latestRecord, nextDue, statusOf, todayStr } from './lib'
 
+const PAGE_W = 680
+const PAGE_H = 1009
+
 export default function ReportView({ state, update }: { state: State; update: (f: (s: State) => State) => void }) {
   const today = todayStr()
+  const sheetRef = useRef<HTMLElement>(null)
+  const [fit, setFit] = useState({ s: 1, h: 0, multi: false })
+  const [zoom, setZoom] = useState(1)
   const rows = state.instruments.map((i, k) => {
     const st = statusOf(i, state.records, state.roundStart, today)
     const last = latestRecord(state.records, i.id)
@@ -31,6 +38,40 @@ export default function ReportView({ state, update }: { state: State; update: (f
         (ng > 0 ? '異常と判定した機器は、処置が済むまで使用しない。' : '')
   const comment = state.comment ?? auto
 
+  // 内容の量に合わせて、A4・縦・1ページに収まる倍率を探す（収まらないほど多いときだけ複数ページ）
+  useLayoutEffect(() => {
+    const el = sheetRef.current
+    if (!el) return
+    const run = () => {
+      let sc = 1
+      for (let n = 0; n < 40; n++) {
+        el.style.width = `${PAGE_W / sc}px`
+        el.style.transform = `scale(${sc})`
+        const h = el.offsetHeight * sc
+        if (h <= PAGE_H * 0.97) {
+          setFit({ s: sc, h, multi: false })
+          return
+        }
+        sc = Math.round((sc - 0.02) * 1000) / 1000
+        if (sc < 0.7) break
+      }
+      el.style.width = `${PAGE_W}px`
+      el.style.transform = 'none'
+      setFit({ s: 1, h: el.offsetHeight, multi: true })
+    }
+    run()
+    // 報告書そのものが広げた幅ではなく、端末の画面の幅で測る
+    const onSize = () => setZoom(Math.min(1, (Math.min(window.innerWidth, window.screen.width || window.innerWidth) - 28 - 26) / PAGE_W))
+    onSize()
+    window.addEventListener('resize', onSize)
+    window.addEventListener('beforeprint', run)
+    void document.fonts?.ready.then(run)
+    return () => {
+      window.removeEventListener('resize', onSize)
+      window.removeEventListener('beforeprint', run)
+    }
+  }, [state.records, state.instruments, state.roundStart, comment])
+
   return (
     <section>
       <div className="no-print card">
@@ -47,6 +88,13 @@ export default function ReportView({ state, update }: { state: State; update: (f
           <span>総括コメント{state.comment === null ? '（自動の文）' : '（書き換え済み）'}</span>
           <textarea rows={4} value={comment} onChange={(e) => update((s) => ({ ...s, comment: e.target.value }))} />
         </label>
+        <p className={`msg ${fit.multi ? 'warn' : 'ok'}`}>
+          {fit.multi
+            ? `測定器と記録が多いため、A4・縦の複数ページになります（${state.instruments.length}台）。`
+            : `A4・縦・1枚に収まります${fit.s < 0.995 ? `（内容が多いため、${Math.round(fit.s * 100)}%に縮小しています）` : ''}。`}
+          余白は15mmあり、コピー機で端が切れにくくしています。
+        </p>
+        <p className="muted small">印刷の画面では、用紙「A4」・向き「縦」・倍率「100%（初期値）」・余白「初期値」のままにしてください。コピー機で印刷するときは、いったん「PDF保存」してから、PDFを「実際のサイズ」で印刷すると、より確実です。</p>
         <div className="row">
           <button className="btn primary big" onClick={() => window.print()}>
             A4で印刷／PDF保存
@@ -59,7 +107,15 @@ export default function ReportView({ state, update }: { state: State; update: (f
         </div>
       </div>
 
-      <article className="sheet" aria-label="定期校正結果報告書">
+      <div className="paperbox-wrap">
+      <div className="paperbox" style={{ zoom: String(zoom) }}>
+        <div className="fit" style={{ height: fit.multi ? 'auto' : fit.h, width: PAGE_W }}>
+      <article
+        ref={sheetRef}
+        className="sheet"
+        aria-label="定期校正結果報告書"
+        style={{ width: fit.multi ? PAGE_W : PAGE_W / fit.s, transform: fit.multi ? 'none' : `scale(${fit.s})` }}
+      >
         <header>
           <h1>定期校正結果報告書</h1>
           <p className="sheet-sub">測定器・工具の定期校正　／　ISO 9001 の監査での提示を想定した様式</p>
@@ -154,12 +210,8 @@ export default function ReportView({ state, update }: { state: State; update: (f
                   <br />
                   {i.name}
                 </td>
-                <td>
-                  {fmtNum(rec ? rec.ref : i.ref, rec ? rec.decimals : i.decimals)}
-                  <br />
-                  <small>
-                    ±{fmtNum(rec ? rec.tol : i.tol, rec ? rec.decimals : i.decimals)} {rec ? rec.unit : i.unit}
-                  </small>
+                <td className="nw1">
+                  {fmtNum(rec ? rec.ref : i.ref, rec ? rec.decimals : i.decimals)} ±{fmtNum(rec ? rec.tol : i.tol, rec ? rec.decimals : i.decimals)} {rec ? rec.unit : i.unit}
                 </td>
                 <td>{rec && rec.measured !== null ? fmtNum(rec.measured, rec.decimals + 1) : '―'}</td>
                 <td>{rec && rec.measured !== null ? fmtDiff(rec.measured - rec.ref, rec.decimals + 1) : '―'}</td>
@@ -172,9 +224,9 @@ export default function ReportView({ state, update }: { state: State; update: (f
           </tbody>
         </table>
 
-        <h2 className="pb">5. 監査証跡ログ（いつ・誰が・どの基準で・合否と処置）</h2>
+        <h2>5. 監査証跡ログ（いつ・誰が・どの基準で・合否と処置）</h2>
         <p className="note">
-          入力した瞬間の日時・担当者と、そのとき使った標準器・基準値・公差を、そのまま記録しています。台帳の基準値をあとで直しても、過去の記録は当時のままです。校正の記録は入力後に書き換えず、訂正は新しい記録の追加で行います。
+          入力した瞬間の日時・担当者と、そのとき使った標準器・基準値・公差を、そのまま記録しています（基準値をあとで直しても過去の記録は当時のまま。記録は書き換えず、訂正は追加で行います）。
         </p>
         {trail.length === 0 ? (
           <p className="none">今回の記録はまだありません。</p>
@@ -185,7 +237,8 @@ export default function ReportView({ state, update }: { state: State; update: (f
                 <th>記録日時</th>
                 <th>管理番号</th>
                 <th>担当者</th>
-                <th>使った基準（標準器・基準値±公差）</th>
+                <th>標準器</th>
+                <th>基準値（公差）</th>
                 <th>実測値</th>
                 <th>判定</th>
                 <th>処置内容</th>
@@ -197,12 +250,9 @@ export default function ReportView({ state, update }: { state: State; update: (f
                   <td>{r.at}</td>
                   <td>{r.instId}</td>
                   <td>{r.person || '―'}</td>
-                  <td className="left">
-                    {r.standard || '―'}
-                    <br />
-                    <small>
-                      {fmtNum(r.ref, r.decimals)} ±{fmtNum(r.tol, r.decimals)} {r.unit}
-                    </small>
+                  <td className="left">{r.standard || '―'}</td>
+                  <td className="nw1">
+                    {fmtNum(r.ref, r.decimals)} ±{fmtNum(r.tol, r.decimals)} {r.unit}
                   </td>
                   <td>{r.measured === null ? '―' : fmtNum(r.measured, r.decimals + 1)}</td>
                   <td className={r.result === '異常' ? 'hl-ng' : r.result === '要調整' ? 'hl-adj' : ''}>{r.result}</td>
@@ -228,6 +278,9 @@ export default function ReportView({ state, update }: { state: State; update: (f
           </tbody>
         </table>
       </article>
+        </div>
+      </div>
+      </div>
     </section>
   )
 }
